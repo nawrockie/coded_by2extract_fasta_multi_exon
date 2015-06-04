@@ -1,0 +1,187 @@
+# EPN, Fri Feb 27 12:15:33 2015
+# 
+# Example of using edirect command line programs for:
+# (A) Getting all DNA coding sequences for a specific protein coding gene
+# (B) NOT YET STARTED: Getting all DNA sequences for a given noncoding gene
+#     (e.g. 16S rRNA)
+#
+# > pwd
+# /panfs/pan1/dnaorg/programs/15_0219_edirect
+#
+# More voluminous notes:
+# ~nawrocke/notebook/15_0211_dnaorg_starting/00LOG.txt
+#
+###############################################################################
+#
+# Relevant email threads:
+#    initial mail  audience                      subject
+#    ------------  ----------------------------  --------
+# E1 02.11.15      Alejandro, EPN, Rich McVeigh  Introduction, Retrieving sequence features RE: FW: Meeting follow-up
+# E2 02.13.15      Alejandro, EPN, Rich McVeigh  Retrieveing sets of sequence ids for a gene
+#                  Eric Sayers, Jonathan Kans
+# E3 03.03.15      Alejandro, EPN, Ken Katz      What are the searchable fields for the gene db?
+#
+###############################################################################
+# 
+# Resources:
+# Edirect/Eutils manual: http://www.ncbi.nlm.nih.gov/books/NBK179288
+# http://www.ncbi.nlm.nih.gov/books/NBK3841/#EntrezGene.Query_Tips_How_to_submit_deta [suggested by Ken Katz E3]
+# 
+###############################################################################
+#
+# Commands and explanations: 
+# 
+# (A) Getting all DNA coding sequences for a specific protein coding gene.
+# Broken down into 3 separate steps:
+#
+# (A1): Fetching all the protein accessions for a specified gene
+# (A2): Given protein accessions, fetch the corresponding DNA
+#       accessions and coordinates of coding region.
+# (A3): Given DNA accessions and coordinates, fetch DNA sequences.
+#
+###############################################################################
+##
+## (A1): Fetching all the protein accessions for a specified gene
+## Example:   infB gene
+## Reqd file: NONE
+## Command and explanation:
+
+esearch -db protein -query "infB [GENE] OR translation initiation factor IF-2 [PROT]" | efetch -format acc > infB.protein.acc
+## (1)                                                                                  (2)                  (3)
+
+## (1) esearch looks up the query in the 'protein' db
+##     use of fields (e.g. '[GENE]') recommended by Jonathan Kans (E2)
+## (2) efetch takes esearch results and outputs only the accessions
+## (3) output will include >= 0 lines each with one field, a protein accession
+##     for this example 36710 accessions fetched [Feb 27 13:13:52 2015]
+##
+## time: about 12 minutes for this example
+##
+## ENTREZ (web) equivalent: 
+## database: protein
+## query:    "infB [GENE] OR translation initiation factor IF-2 [PROT]"
+## 
+## Here we're using 'infB' and its alias 'translation initiation factor
+## IF-2', but there may be more. Rich McVeigh (E1) recommended using
+## the 'gene' database to find aliases.
+##
+## TODO: determine a good command for finding gene aliases.
+##
+#####################################
+##
+## (A2): Given protein accessions, fetch the corresponding DNA
+##       accessions and coordinates of coding region.
+##
+## Example:   infB gene
+## Reqd File: 100.inf.acc: 100 randomly chosen (using esl-selectn) 
+##            accessions from (A1) example command output above 
+##            (infB.protein.acc).
+## Commands and explanation:
+## There's actually two commands here, the first is the main one.
+## The second converts the output from the first into a file required
+## by step A3 below.
+
+## command 1 of 2:
+cat 100.infB.acc | epost -db protein -format acc | efetch -format gpc | xtract -insd CDS  coded_by | coded_by2extract_fasta_multi_exon.pl > 65.infB.efa
+## (1)             (2)                             (3)                  (4)    (4a)  (4b) (4c)       (5)                                    (6)
+
+## AAS comments: (work done in /panfs/pan1.be-md.ncbi.nlm.nih.gov/dnaorg/2015.03.07
+## The command
+cat 100.infB.acc | epost -db protein -format acc | efetch -format gpc | xtract -insd INSDSeq_locus | grep . | cut -f2 > proteins_with_loci.txt
+                                                                                       (4e)
+
+## (4e) Find whether the protein has a locus or not
+
+## Questions:
+
+## Why is every other line returned by
+xtract -insd INSDSeq_locus
+## blank?
+
+## Why do 4/100 proteins not have loci?
+## Partial answer
+echo YP_007416674.1 | epost -db protein -format acc | more
+
+## yields
+## ERROR in count output: Empty result - nothing to do
+## URL: http://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=protein&query_key=1&WebEnv=NCID_1_57798011_130.14.18.34_9001_1425764796_1160864869_0MetA0_S_MegaStore_F_1&retmax=0&usehistory=y&edirect=2.20&tool=entrez-direct-count&email=schaffer@cbbdev11.be-md.ncbi.nlm.nih.gov
+
+## A search of Entrez shows that YP_007416674.1, YP_007416674.1, and YP_005940077.1 were discontinued and  WP_014060094.1 gives nothing
+## These four absences explain why 
+cat 100.infB.acc | epost -db protein -format acc
+## gives a query count of 96 rather than the expected 100
+
+## Is there a way to find the correspondence between input accessions and output loci?
+
+## command 2 of 2:
+cat 65.infB.efa | awk '{ print $1 }' | sort | uniq > 65.infB.idfetch
+##[--------------------- (7) --------------------]   (8)
+
+## (1) cat the accession file (one accession per line) 
+## (2) epost uploads the accessions to entrez
+## (3) efetch fetches the records in gpc format (INSDSeq XML structured version of GenPept)
+## (4) xtract extracts the CDS/coded_by 'field' from the GenPept record
+## (4a) the '-insd' option tells xtract the format is 'INSD' (this is synonymous with 'gpc' in this context)
+## (4b) the 'CDS' argument is a 'INSDFeature_key' (there are many in a gpc file)
+## (4c) the 'coded_by' argument is a 'INSDQualifier_name' (there are >=1 per INSDFeature_key in a gpc file)
+## (5) coded_by2extract_fasta_multi_exon.pl reformats the output of xtract into extract_fasta_multi_exon's expected input format
+## (6) output will be 0 or more lines of this format:
+##
+##      <dna-accn> <num exons (n)> <start_1> <stop_1> <start_2> <stop_2> ... <start_n> <stop_n> <strand '+' or '-'>
+##
+##     Note: we've lost protein accession data here. To get it back: modify coded_by2extract_fasta_multi_exon.pl
+##           to output it to a separate file.
+##     Note: NOT ALL Protein accessions in input will have a corresponding CDS sequence
+##           that gets extracted in (4) (STILL WORKING ON THIS, see TODO below)
+##           In this example only 65 accessions are extracted
+## (7) the output of coded_by_extract_fasta_multi_exon.pl needs to be slightly
+##     modified for input to idfetch in step A3 below. Specifically, it's important
+##     that no sequence is listed twice, which can happen (probably rarely).
+## (8) output will be 0 or more lines of this format:
+##     
+##     <dna-accn>
+## 
+##     These accessions will be the same ones in (6) but may be in a different
+##     order (due to the 'sort') and will only include one instance of each 
+##     (due to the 'uniq') while (6) may include duplicates.
+##
+## time: about 8 seconds for 100 sequences for first command, second command takes negligible time
+##
+## Useful alternatives commands:
+## '(1) | (2) | (3)':  will create a GenPept-INSD format file you can look at to find 'INSDFeature_keys'
+##                     and INSD_Qualifiers
+## '(1) | (2) | efetch -format gp' will create a GenPept flat file that's easier to read
+##
+## TODO: figure out how to get protein CDS sequences for those missed
+## by (4). One example:
+## esearch -db protein -query "A1UER8.1 [ACCN]" | efetch -format gpc | xtract -element INSDSeq_source-db
+## Then parse the 'xrefs'. In this case CP000518.1 is the DNA sequence
+## we want to get.
+##
+## AAS comment: In the example a search of Entrez shows that the corresponding nucleotide sequence Mkms_2128 was discontinued in February 2015
+
+#####################################
+##
+## (A3): Given DNA accessions and coordinates, fetch DNA sequences.
+## Example: infB gene
+## Reqd File: 100.infB.coded_by: output from (A2) example above.
+## Command and explanation:
+##
+
+idfetch -t 5 -c 1 -G 65.infB.idfetch | ../id_fasta.pl | ../extract_fasta_multi_exon 65.infB.efa > 65.infB.fa
+## (1)                                 (2)              (3)                                       (4)
+
+## For more documentation on these programs see:
+## /panfs/pan1/dnaorg/programs/15_0213_extract_fasta_richa/00NOTES.sh
+##
+## (1) idfetch fetches FULL-LENGTH sequences given an accession
+## (2) id_fasta.pl renames the sequences output from idfetch
+## (3) extract_fasta_multi_exon extracts subsequences for the given coordinates
+##     those subsequences may multiple exons that will be concatenated
+##     into one sequence.
+## (4) 65.fa: fasta file with 65 subsequences, one of which is two exons
+##     concatenated together, the other 64 are single exons.
+##  
+## time: about 17 seconds for ~70 sequences
+##
+# Last updated [EPN, Thu Mar  5 15:24:51 2015]
