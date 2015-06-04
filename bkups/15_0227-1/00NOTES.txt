@@ -1,0 +1,104 @@
+# EPN, Fri Feb 27 12:15:33 2015
+# 
+# Example of using edirect command line programs for:
+# (A) Getting all DNA coding sequences for a specific protein coding gene
+# (B) NOT YET STARTED: Getting all DNA sequences for a given noncoding gene
+#     (e.g. 16S rRNA)
+#
+# > pwd
+# /panfs/pan1/dnaorg/programs/15_0219_edirect
+#
+# More voluminous notes:
+# ~nawrocke/notebook/15_0211_dnaorg_starting/00LOG.txt
+#
+###############################################################################
+#
+# Relevant email threads:
+#    initial mail  audience                      subject
+#    ------------  ----------------------------  --------
+# E1 02.11.15      Alejandro, EPN, Rich McVeigh  Introduction, Retrieving sequence features RE: FW: Meeting follow-up
+# E2 02.13.15      Alejandro, EPN, Rich McVeigh  Retrieveing sets of sequence ids for a gene
+#                  Eric Sayers, Jonathan Kans
+#
+###############################################################################
+# 
+# Resources:
+# Edirect/Eutils manual: http://www.ncbi.nlm.nih.gov/books/NBK179288
+#
+###############################################################################
+#
+# Commands and explanations: 
+# 
+# (A) Getting all DNA coding sequences for a specific protein coding gene.
+# Broken down into 3 separate steps:
+#
+# (A1): Fetching all the protein accessions for a specified gene
+# (A2): Given protein accessions, fetch the corresponding DNA
+#       accessions and coordinates of coding region.
+# (A3): Given DNA accessions and coordinates, fetch DNA sequences.
+#
+###############################################################################
+##
+## (A1): Fetching all the protein accessions for a specified gene
+## Example: infB gene
+## Command:
+
+esearch -db protein -query "infB [GENE] OR translation initiation factor IF-2 [PROT]" | efetch -format acc > infB.protein.acc
+## (1)                                                                                  (2)                  (3)
+
+## (1) esearch looks up the query in the 'protein' db
+##     use of fields (e.g. '[GENE]') recommended by Jonathan Kans (E2)
+## (2) efetch takes esearch results and outputs only the accessions
+## 
+## (3) output will include >= 0 lines each with one field, a protein accession
+##     for this example 36710 accessions fetched [Feb 27 13:13:52 2015]
+##
+## time: about 12 minutes for this example
+##
+## ENTREZ (web) equivalent: 
+## database: protein
+## query:    "infB [GENE] OR translation initiation initiation factor IF-2 [PROT]"
+## 
+## Here we're using 'infB' and its alias 'translation initiation factor
+## IF-2', but there may be more. Rich McVeigh (E1) recommended using
+## the 'gene' database to find aliases.
+##
+## TODO: determine a good command for finding gene aliases
+##
+#####################################
+##
+## (A2): Given protein accessions, fetch the corresponding DNA
+##       accessions and coordinates of coding region.
+##
+## Example: infB gene
+## File:    100.inf.protein.acc: 100 randomly chosen accessions from A1
+##          example command output (infB.protein.acc)
+## Command: 
+
+cat 100.infB.protein.acc | epost -db protein -format acc | efetch -format gpc | xtract -insd CDS  coded_by | awk 'NF' > 100.infB.coded_by
+## (1)                     (2)                             (3)                  (4)    (4a)  (4b) (4c)       (5)        (6)
+
+## (1) cat the accession file (one accession per line) 
+## (2) epost uploads the accessions to entrez
+## (3) efetch fetches the records in gpc format (INSDSeq XML structured version of GenPept)
+## (4) xtract extracts the CDS/coded_by 'field' from the GenPept record
+## (4a) the '-insd' option tells xtract the format is 'INSD' (this is synonymous with 'gpc' in this context)
+## (4b) the 'CDS' argument is a 'INSDFeature_key' (there are many in a gpc file)
+## (4c) the 'coded_by' argument is a 'INSDQualifier_name' (there are >=1 per INSDFeature_key in a gpc file)
+## (5) awk 'NF' removes blank lines
+## (6) output will be 0 or more lines of this format:
+##
+##      <protein-accn> <dna-accn>:<start>..<stop> 
+##      OR
+##      <protein-accn> complement(<dna-accn>:<start>..<stop>)
+##
+##     Protein accessions will be from (1) but not necessarily in the same order
+##     NOT ALL Protein accessions will necessarily be included (68/100 in this file are included)
+## 
+## Useful alternatives commands:
+## '(1) | (2) | (3)':  will create a GenPept-INSD format file you can look at to find 'INSDFeature_keys'
+##                     and INSD_Qualifiers
+## '(1) | (2) | efetch -format gp' will create a GenPept flat file that's easier to read
+##
+
+
